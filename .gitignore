@@ -1,0 +1,17 @@
+# Compiled files
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.plan
+*.terraform.lock.hcl
+
+# Directories
+.terraform/
+.vs/
+.idea/
+
+# SSH Keys
+*.pem
+
+# Ignore Mac .DS_Store files
+.DS_Store
