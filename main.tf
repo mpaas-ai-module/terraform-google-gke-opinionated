@@ -82,10 +82,10 @@ resource "google_container_cluster" "primary" {
 
   lifecycle {
     ignore_changes = [
-      node_config,initial_node_count
+      node_config, initial_node_count
     ]
   }
-  
+
   maintenance_policy {
     recurring_window {
       start_time = var.maintenance_start_time
@@ -120,9 +120,9 @@ resource "google_container_node_pool" "primary_node_pool" {
   }
 
   node_config {
-    service_account   = google_service_account.default.email
-    machine_type      = var.machine_type
-    image_type        = var.image_type
+    service_account = google_service_account.default.email
+    machine_type    = var.machine_type
+    image_type      = var.image_type
     # boot_disk_kms_key = var.boot_disk_kms_key
 
     # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
@@ -143,7 +143,7 @@ resource "google_container_node_pool" "primary_node_pool" {
     ignore_changes = [
       # Ignore changes to node_config, because it usually always changes after
       # resource is created
-      node_config,initial_node_count
+      node_config, initial_node_count
     ]
   }
 
@@ -267,7 +267,8 @@ resource "google_compute_router_nat" "nat" {
 
 module "gcr-dns" {
   count                              = var.enable_private_cluster && var.create_private_dns_zone ? 1 : 0
-  source                             = "../terraform-google-dns-managed-zone" # PoC fork: registry 1.0.10 pins provider =4.1.0 (transitive conflict)
+  source                             = "mpaas-ai-module/dns-managed-zone/google" # registry source: local ../ escapes the module package once published
+  version                            = "1.0.0"
   name                               = "gcr-io"
   dns_name                           = "gcr.io."
   is_private                         = true
@@ -298,7 +299,8 @@ module "gcr-dns" {
 
 module "googleapis-dns" {
   count                              = var.enable_private_cluster && var.enable_private_googleapis_route && var.create_private_dns_zone ? 1 : 0
-  source                             = "../terraform-google-dns-managed-zone" # PoC fork: registry 1.0.10 pins provider =4.1.0 (transitive conflict)
+  source                             = "mpaas-ai-module/dns-managed-zone/google" # registry source: local ../ escapes the module package once published
+  version                            = "1.0.0"
   name                               = "googleapis-com"
   dns_name                           = "googleapis.com."
   is_private                         = true
@@ -335,10 +337,10 @@ resource "google_project_iam_binding" "network_binding7" {
   project = var.project_id
   role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   members = [
-    "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com","serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com"
+    "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com", "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com"
   ]
   lifecycle {
-    ignore_changes = [ members ]
+    ignore_changes = [members]
   }
 
 }
