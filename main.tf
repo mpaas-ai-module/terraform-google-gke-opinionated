@@ -332,15 +332,19 @@ module "googleapis-dns" {
 data "google_project" "service_project6" {
   project_id = var.project_id
 }
-resource "google_project_iam_binding" "network_binding7" {
-  count   = 1
+# Additive members, NOT an authoritative google_project_iam_binding.
+#
+# As a binding this REPLACED every member of
+# roles/cloudkms.cryptoKeyEncrypterDecrypter across the whole project, so it
+# silently revoked the GCS, Cloud SQL, Dataproc, Composer, Artifact Registry and
+# BigQuery agents that hold the same role. `lifecycle { ignore_changes = [members] }`
+# did not prevent that — it only hid the resulting drift from later plans.
+resource "google_project_iam_member" "network_binding7" {
+  for_each = toset([
+    "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com",
+    "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com",
+  ])
   project = var.project_id
   role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  members = [
-    "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com", "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com"
-  ]
-  lifecycle {
-    ignore_changes = [members]
-  }
-
+  member  = each.value
 }
