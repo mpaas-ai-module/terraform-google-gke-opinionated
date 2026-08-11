@@ -243,13 +243,13 @@ variable "release_channel" {
 }
 
 variable "initial_node_count" {
-  type = number
+  type        = number
   description = "Initial node count for the cluster"
 }
 
 
 variable "vertical_pod_autoscaling_enabled" {
-  type = bool
+  type    = bool
   default = false
 }
 

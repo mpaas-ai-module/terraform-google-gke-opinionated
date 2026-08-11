@@ -340,10 +340,12 @@ data "google_project" "service_project6" {
 # BigQuery agents that hold the same role. `lifecycle { ignore_changes = [members] }`
 # did not prevent that — it only hid the resulting drift from later plans.
 resource "google_project_iam_member" "network_binding7" {
-  for_each = toset([
-    "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com",
-    "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com",
-  ])
+  # Static KEYS (plan-known) with apply-time VALUES: a set element becomes the
+  # resource key, and a key derived from a project number is unknown at plan.
+  for_each = {
+    compute_system         = "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com"
+    container_engine_robot = "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com"
+  }
   project = var.project_id
   role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member  = each.value
