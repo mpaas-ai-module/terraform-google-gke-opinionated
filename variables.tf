@@ -253,20 +253,20 @@ variable "vertical_pod_autoscaling_enabled" {
   default = false
 }
 
-variable "maintenance_start_time" {
-  description = "Start time for GKE maintenance window in UTC"
-  type        = string
-  default     = "1970-01-01T18:30:00Z"
-}
+# variable "maintenance_start_time" {
+#   description = "Start time for GKE maintenance window in UTC"
+#   type        = string
+#   default     = "1970-01-01T18:30:00Z"
+# }
 
-variable "maintenance_end_time" {
-  description = "End time for GKE maintenance window in UTC"
-  type        = string
-  default     = "1970-01-02T09:30:00Z"
-}
+# variable "maintenance_end_time" {
+#   description = "End time for GKE maintenance window in UTC"
+#   type        = string
+#   default     = "1970-01-02T09:30:00Z"
+# }
 
-variable "maintenance_recurrence" {
-  description = "Recurrence pattern for GKE maintenance window"
-  type        = string
-  default     = "FREQ=WEEKLY;BYDAY=SA,SU"
-}
+# variable "maintenance_recurrence" {
+#   description = "Recurrence pattern for GKE maintenance window"
+#   type        = string
+#   default     = "FREQ=WEEKLY;BYDAY=SA,SU"
+# }

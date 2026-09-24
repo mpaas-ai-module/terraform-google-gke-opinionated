@@ -4,6 +4,46 @@ resource "google_service_account" "default" {
   project      = var.project_id
 }
 
+# API enablement ONLY
+resource "google_project_service" "container" {
+  project            = var.project_id
+  service            = "container.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "compute" {
+  project            = var.project_id
+  service            = "compute.googleapis.com"
+  disable_on_destroy = false
+}
+
+# KMS key auto-fetching ONLY
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+resource "google_kms_crypto_key_iam_member" "gke_cmek" {
+  crypto_key_id = "projects/${var.project_id}/locations/${var.subnet_region}/keyRings/${var.project_id}/cryptoKeys/${data.google_project.current.name}-key"
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+  member = "serviceAccount:service-${data.google_project.current.number}@compute-system.iam.gserviceaccount.com"
+
+  lifecycle {
+    ignore_changes = [member]
+  }
+}
+
+resource "google_kms_crypto_key_iam_member" "gke_container_cmek" {
+  crypto_key_id = "projects/${var.project_id}/locations/${var.subnet_region}/keyRings/${var.project_id}/cryptoKeys/${data.google_project.current.name}-key"
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+  member = "serviceAccount:service-${data.google_project.current.number}@container-engine-robot.iam.gserviceaccount.com"
+
+  lifecycle {
+    ignore_changes = [member]
+  }
+}
+
 resource "google_container_cluster" "primary" {
   project                     = var.project_id
   name                        = "${var.name}-${var.cluster_postfix}"
@@ -14,6 +54,7 @@ resource "google_container_cluster" "primary" {
   subnetwork                  = var.subnet
   enable_shielded_nodes       = var.enable_shielded_nodes
   enable_intranode_visibility = var.enable_intranode_visibility
+  
   vertical_pod_autoscaling {
     enabled = var.vertical_pod_autoscaling_enabled
   }
@@ -59,18 +100,21 @@ resource "google_container_cluster" "primary" {
       enabled = true
     }
   }
+
   node_config {
     service_account = google_service_account.default.email
     machine_type    = var.machine_type
     image_type      = var.image_type
     //not advisable to use preemptible nodes for default node pool
     oauth_scopes = tolist(var.oauth_scopes)
+
     dynamic "workload_metadata_config" {
       for_each = var.workload_identity ? [1] : []
       content {
         mode = "GKE_METADATA"
       }
     }
+
     dynamic "shielded_instance_config" {
       for_each = var.enable_shielded_nodes ? [1] : []
       content {
@@ -78,26 +122,31 @@ resource "google_container_cluster" "primary" {
         enable_integrity_monitoring = true
       }
     }
+    
   }
 
-  lifecycle {
-    ignore_changes = [
-      node_config, initial_node_count
-    ]
-  }
+  # lifecycle {
+  #   ignore_changes = [
+  #     node_config,initial_node_count
+  #   ]
+  # }
 
-  maintenance_policy {
-    recurring_window {
-      start_time = var.maintenance_start_time
-      end_time   = var.maintenance_end_time
-      recurrence = var.maintenance_recurrence
-    }
-  }
+  # maintenance_policy {
+  #   recurring_window {
+  #     start_time = var.maintenance_start_time
+  #     end_time   = var.maintenance_end_time
+  #     recurrence = var.maintenance_recurrence
+  #   }
+  # }
 
   depends_on = [
     google_project_iam_member.project,
     google_compute_subnetwork_iam_member.cloudservices,
     google_compute_subnetwork_iam_member.container_engine_robot,
+    google_project_service.container,
+    google_project_service.compute,
+    google_kms_crypto_key_iam_member.gke_cmek,
+    google_kms_crypto_key_iam_member.gke_container_cmek,
   ]
 }
 
@@ -108,6 +157,7 @@ resource "google_container_node_pool" "primary_node_pool" {
   cluster            = google_container_cluster.primary.name
   initial_node_count = var.initial_node_count
   max_pods_per_node  = var.primary_node_pool_max_pods_per_node
+
 
   autoscaling {
     min_node_count = var.default_node_pool_min_count
@@ -123,34 +173,38 @@ resource "google_container_node_pool" "primary_node_pool" {
     service_account = google_service_account.default.email
     machine_type    = var.machine_type
     image_type      = var.image_type
-    # boot_disk_kms_key = var.boot_disk_kms_key
-
-    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
+    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM.
     oauth_scopes = tolist(var.oauth_scopes)
+
     dynamic "workload_metadata_config" {
       for_each = var.workload_identity ? [1] : []
       content {
         mode = "GKE_METADATA"
       }
     }
+
     shielded_instance_config {
       enable_secure_boot          = true
       enable_integrity_monitoring = true
     }
   }
 
-  lifecycle {
-    ignore_changes = [
-      # Ignore changes to node_config, because it usually always changes after
-      # resource is created
-      node_config, initial_node_count
-    ]
-  }
+  # lifecycle {
+  #   ignore_changes = [
+  #     # Ignore changes to node_config, because it usually always changes after
+  #     # resource is created
+  #     node_config,initial_node_count
+  #   ]
+  # }
 
   depends_on = [
     google_project_iam_member.project,
     google_compute_subnetwork_iam_member.cloudservices,
     google_compute_subnetwork_iam_member.container_engine_robot,
+    google_project_service.container,
+    google_project_service.compute,
+    google_kms_crypto_key_iam_member.gke_cmek,
+    google_kms_crypto_key_iam_member.gke_container_cmek,
   ]
 }
 
@@ -267,8 +321,8 @@ resource "google_compute_router_nat" "nat" {
 
 module "gcr-dns" {
   count                              = var.enable_private_cluster && var.create_private_dns_zone ? 1 : 0
-  source                             = "mpaas-ai-module/dns-managed-zone/google" # registry source: local ../ escapes the module package once published
-  version                            = "1.0.0"
+  source                             = "bootlabstech/dns-managed-zone/google"
+  version                            = "1.0.10" #old version 10
   name                               = "gcr-io"
   dns_name                           = "gcr.io."
   is_private                         = true
@@ -299,8 +353,8 @@ module "gcr-dns" {
 
 module "googleapis-dns" {
   count                              = var.enable_private_cluster && var.enable_private_googleapis_route && var.create_private_dns_zone ? 1 : 0
-  source                             = "mpaas-ai-module/dns-managed-zone/google" # registry source: local ../ escapes the module package once published
-  version                            = "1.0.0"
+  source                             = "bootlabstech/dns-managed-zone/google"
+  version                            = "1.0.10" #old version 10
   name                               = "googleapis-com"
   dns_name                           = "googleapis.com."
   is_private                         = true
@@ -327,26 +381,4 @@ module "googleapis-dns" {
       ]
     }
   ]
-}
-
-data "google_project" "service_project6" {
-  project_id = var.project_id
-}
-# Additive members, NOT an authoritative google_project_iam_binding.
-#
-# As a binding this REPLACED every member of
-# roles/cloudkms.cryptoKeyEncrypterDecrypter across the whole project, so it
-# silently revoked the GCS, Cloud SQL, Dataproc, Composer, Artifact Registry and
-# BigQuery agents that hold the same role. `lifecycle { ignore_changes = [members] }`
-# did not prevent that — it only hid the resulting drift from later plans.
-resource "google_project_iam_member" "network_binding7" {
-  # Static KEYS (plan-known) with apply-time VALUES: a set element becomes the
-  # resource key, and a key derived from a project number is unknown at plan.
-  for_each = {
-    compute_system         = "serviceAccount:service-${data.google_project.service_project6.number}@compute-system.iam.gserviceaccount.com"
-    container_engine_robot = "serviceAccount:service-${data.google_project.service_project6.number}@container-engine-robot.iam.gserviceaccount.com"
-  }
-  project = var.project_id
-  role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member  = each.value
 }
